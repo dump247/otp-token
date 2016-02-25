@@ -1,7 +1,7 @@
 A python script to generate OTP tokens.
 
-The secret is stored in the system keyring/store. The code can be copied to the
-clipboard for easy paste.
+The secret is stored in the system keyring/store. The generated OTP code can be copied
+automatically to the clipboard for easy paste.
 
 To create or update a secret:
 
