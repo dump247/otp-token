@@ -8,16 +8,14 @@ To create or update a secret:
 ```shell
 $ otp-token somename --set totp
 Enter the OTP secret:
-Token: 120800
-Time remaining: 25 secs
+120800
 ```
 
 Generate a token:
 
 ```shell
 $ otp-token somename
-Token: 120800
-Time remaining: 25 secs
+120800
 ```
 
 Generate a token and copy to clipboard:

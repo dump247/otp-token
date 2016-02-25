@@ -110,10 +110,10 @@ def main():
 
         if args.copy:
             pyperclip.copy(str(code))
+            print("Time remaining: {} secs".format(remaining.seconds))
         else:
-            print("Token: {}".format(code))
+            print(str(code))
 
-        print("Time remaining: {} secs".format(remaining.seconds))
     else:
         raise Exception('Unknown OTP type [{}]'.format(otp_type))
 
