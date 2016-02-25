@@ -1,0 +1,2 @@
+keyring>=8.4.1
+pyperclip>=1.5.26

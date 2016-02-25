@@ -1,0 +1,121 @@
+#!/usr/bin/env python
+
+from datetime import datetime
+import time
+import hmac
+import hashlib
+import base64
+import argparse
+import getpass
+import json
+
+import keyring
+import pyperclip
+
+KEYRING_SERVICE = 'otp-secret'
+
+class Totp(object):
+    def __init__(self, secret, interval_secs=30, digits=6, digest=hashlib.sha1):
+        """
+        Create a new TOTP code generator.
+
+        Parameters:
+         secret (string|list of byte): shared secret as either a base32 encoded string or byte array
+         interval_secs (int): interval, in seconds, to generate codes at
+         digits (int): number of digits in the generated codes
+         digest (function): HMAC digest function to use
+        """
+        if isinstance(secret, str):
+            secret = secret_to_bytes(secret)
+
+        self.secret = secret
+        self.interval_secs = interval_secs
+        self.digits = digits
+        self.digest = digest
+
+    def generate(self, at=None):
+        """
+        Generate a new OTP code.
+
+        Parameters:
+         at (datetime): timestamp to generate the code for or None to use current time
+
+        Returns:
+         (int): generated code
+        """
+        remaining_time, timecode = self.__timecode(at or datetime.now())
+        hmac_hash = hmac.new(self.secret, timecode, self.digest).digest()
+
+        offset = ord(hmac_hash[19]) & 0xf
+        code = ((ord(hmac_hash[offset]) & 0x7f) << 24 |
+            (ord(hmac_hash[offset + 1]) & 0xff) << 16 |
+            (ord(hmac_hash[offset + 2]) & 0xff) << 8 |
+            (ord(hmac_hash[offset + 3]) & 0xff))
+
+        return remaining_time, code % 10 ** self.digits
+
+    def __timecode(self, at):
+        intervals = int(time.mktime(at.timetuple()) / self.interval_secs)
+        end_time = datetime.fromtimestamp((intervals + 1) * self.interval_secs)
+        return end_time - at, timestamp_to_bytestring(intervals)
+
+def secret_to_bytes(secret):
+    """Convert base32 encoded secret string to bytes"""
+    return base64.b32decode(secret)
+
+def timestamp_to_bytestring(val, padding=8):
+    """Convert Unix timestamp to bytes"""
+    result = []
+
+    while val != 0:
+        result.append(chr(val & 0xFF))
+        val = val >> 8
+
+    return ''.join(reversed(result)).rjust(padding, '\0')
+
+
+def update_secret(service, type, secret):
+    keyring.set_password(KEYRING_SERVICE, service, json.dumps({'type': type, 'secret': secret}))
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate OTP tokens.')
+    parser.add_argument('service', help='Name of the service to generate the token for.')
+    parser.add_argument('--set', '-s', choices=['totp'],
+                        help='Create or update a service entry. You will be prompted for the secret.')
+    parser.add_argument('--delete', '-d', action='store_true', default=False,
+                        help='Delete a service entry.')
+    parser.add_argument('--copy', '-c', action='store_true', default=False,
+                        help='Copy the OTP token to the system clipboard instead of stdout.')
+    args = parser.parse_args()
+
+    if args.delete:
+        keyring.delete_password(KEYRING_SERVICE, args.service)
+        return
+
+    secret = keyring.get_password(KEYRING_SERVICE, args.service)
+
+    if args.set:
+        otp_secret = getpass.getpass('Enter the OTP secret: ')
+        otp_type = args.set
+        update_secret(args.service, otp_type, otp_secret)
+    elif secret is None:
+        raise Exception('Unknown OTP service [{}]'.format(args.service))
+    else:
+        secret = json.loads(secret)
+        otp_secret = secret['secret']
+        otp_type = secret['type']
+
+    if otp_type == 'totp':
+        remaining, code = Totp(str(otp_secret)).generate()
+
+        if args.copy:
+            pyperclip.copy(str(code))
+        else:
+            print("Token: {}".format(code))
+
+        print("Time remaining: {} secs".format(remaining.seconds))
+    else:
+        raise Exception('Unknown OTP type [{}]'.format(otp_type))
+
+if __name__ == '__main__':
+    main()
